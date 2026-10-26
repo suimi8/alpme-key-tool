@@ -35,8 +35,11 @@ PS1_SCRIPT = os.path.join(ROOT, "alpme-get-key.ps1")
 def run_py(scenario, extra=None, timeout=90):
     srv = MockAlpme(scenario).start()
     try:
-        cmd = [
-            sys.executable, PY_SCRIPT,
+        base = [sys.executable]
+        if os.environ.get("ALPME_COV") == "1":
+            base = [sys.executable, "-m", "coverage", "run", "--parallel-mode"]
+        cmd = base + [
+            PY_SCRIPT,
             "--base-url", srv.base_url,
             "--no-browser",
             "--key-name", "TEST",
