@@ -6,12 +6,18 @@ on:
       - "alpme-get-key.py"
       - "alpme-get-key.ps1"
       - "tests/**"
+      - "requirements-dev.txt"
+      - ".coveragerc"
       - ".github/workflows/alpme-key-compat.yml"
   pull_request:
   workflow_dispatch:
 
 permissions:
   contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   python:
@@ -22,26 +28,19 @@ jobs:
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
         python: ["3.9", "3.11", "3.13"]
+        include:
+          # Python 3.8 is EOL; keep an explicit runner for each platform.
+          - os: ubuntu-22.04
+            python: "3.8"
+          - os: windows-latest
+            python: "3.8"
+          - os: macos-15-intel
+            python: "3.8"
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python }}
-      - name: Compile
-        run: python -m py_compile alpme-get-key.py tests/mock_alpme.py tests/test_flows.py
-      - name: Offline protocol tests
-        run: python tests/test_flows.py
-        env:
-          PYTHONIOENCODING: utf-8
-
-  python38:
-    name: python 3.8 / ubuntu-22.04
-    runs-on: ubuntu-22.04
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.8"
       - name: Compile
         run: python -m py_compile alpme-get-key.py tests/mock_alpme.py tests/test_flows.py
       - name: Offline protocol tests
@@ -81,6 +80,44 @@ jobs:
           [void][System.Management.Automation.Language.Parser]::ParseFile(
             (Resolve-Path ./alpme-get-key.ps1).Path, [ref]$null, [ref]$errors)
           if ($errors) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }
+
+  coverage:
+    name: coverage
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: requirements-dev.txt
+      - name: Install dev dependencies
+        run: python -m pip install -r requirements-dev.txt
+      - name: Run tests with subprocess coverage
+        env:
+          ALPME_COV: "1"
+          PYTHONIOENCODING: utf-8
+        run: python tests/test_flows.py
+      - name: Combine and report coverage
+        run: |
+          python -m coverage combine
+          python -m coverage report -m
+          python -m coverage html -d htmlcov
+          python -m coverage xml -o coverage.xml
+      - name: Coverage summary
+        run: |
+          echo "### Python coverage" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+          python -m coverage report -m >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload coverage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.xml
+            htmlcov/
+          if-no-files-found: error
 
   live-models-smoke:
     name: live API smoke (manual)

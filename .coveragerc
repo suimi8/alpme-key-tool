@@ -1,0 +1,9 @@
+[run]
+branch = True
+parallel = True
+
+[report]
+include = alpme-get-key.py
+exclude_lines =
+    pragma: no cover
+    if __name__ == .__main__.:
