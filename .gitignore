@@ -1,0 +1,21 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# Secrets / local config
+.env
+*.env
+*.key
+*.secret
+*.pem
+
+# Logs / demo artifacts
+*.log
+alpme_mock_*.log
+alpme_mock_*.err
+
+# OS
+.DS_Store
+Thumbs.db

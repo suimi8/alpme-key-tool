@@ -1,0 +1,103 @@
+name: alpme-key-compat
+
+on:
+  push:
+    paths:
+      - "alpme-get-key.py"
+      - "alpme-get-key.ps1"
+      - "tests/**"
+      - ".github/workflows/alpme-key-compat.yml"
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    name: python ${{ matrix.python }} / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        python: ["3.9", "3.11", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Compile
+        run: python -m py_compile alpme-get-key.py tests/mock_alpme.py tests/test_flows.py
+      - name: Offline protocol tests
+        run: python tests/test_flows.py
+        env:
+          PYTHONIOENCODING: utf-8
+
+  python38:
+    name: python 3.8 / ubuntu-22.04
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.8"
+      - name: Compile
+        run: python -m py_compile alpme-get-key.py tests/mock_alpme.py tests/test_flows.py
+      - name: Offline protocol tests
+        run: python tests/test_flows.py
+        env:
+          PYTHONIOENCODING: utf-8
+
+  powershell:
+    name: pwsh / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: PowerShell syntax (pwsh 7)
+        shell: pwsh
+        run: |
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path ./alpme-get-key.ps1).Path, [ref]$null, [ref]$errors)
+          if ($errors) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }
+      - name: PowerShell offline flow tests
+        shell: pwsh
+        run: python tests/test_flows.py --powershell
+        env:
+          PYTHONIOENCODING: utf-8
+      - name: Windows PowerShell 5.1 syntax
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $errors = $null
+          [void][System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path ./alpme-get-key.ps1).Path, [ref]$null, [ref]$errors)
+          if ($errors) { $errors | ForEach-Object { Write-Error $_.Message }; exit 1 }
+
+  live-models-smoke:
+    name: live API smoke (manual)
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    steps:
+      - name: GET /v1/models with secret key
+        env:
+          ALPME_API_KEY: ${{ secrets.ALPME_API_KEY }}
+        run: |
+          if [ -z "$ALPME_API_KEY" ]; then
+            echo "ALPME_API_KEY secret not set; skipping live smoke test"
+            exit 0
+          fi
+          code=$(curl -sS -o /tmp/models.json -w "%{http_code}" \
+            -H "accept: application/json" \
+            -H "authorization: Bearer ${ALPME_API_KEY}" \
+            https://alpme.com/v1/models)
+          echo "HTTP ${code}, bytes $(wc -c < /tmp/models.json)"
+          test "${code}" = "200"
