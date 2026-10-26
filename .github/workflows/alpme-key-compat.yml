@@ -16,7 +16,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -34,7 +34,7 @@ jobs:
             python: "3.8"
           - os: windows-latest
             python: "3.8"
-          - os: macos-13
+          - os: macos-15-intel
             python: "3.8"
     steps:
       - uses: actions/checkout@v4
